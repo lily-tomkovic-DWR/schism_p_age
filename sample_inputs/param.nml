@@ -30,6 +30,7 @@
 ! Define # of tracers in tracer modules (if enabled)
   ntracer_gen = 2 !user defined module (USE_GEN)
   ntracer_age = 4 !age calculation (USE_AGE). Must be =2*N where N is # of age tracers
+  ip_age = 0 !use partial age as age method. 0=use default age, 1=use partial age
   sed_class = 5 !SED3D (USE_SED)
   eco_class = 27 !EcoSim (USE_ECO): must be between [25,60]
 
