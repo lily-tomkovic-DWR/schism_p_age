@@ -7306,16 +7306,23 @@
 !$OMP   end workshare
 
 !$OMP   do
-        do i=1,nea
+        do i=1,nea ! cycle through all elements
           if(idry_e(i)==1) cycle
-
+			
           !Element wet
-          do j=itmp1,itmp2 !1,ntracers
+          do j=itmp1,itmp2 !1,ntracers (ex 3:6 for 2 age species, 4 age tracers)
+			dmask=1 ! default: allow concentration to multiply
+			if (ip_age) then
+			  dmask=0 ! set to zero so only turned on when in partial age domain
+			  if(ipart_age(i)==j-itmp1+1-ntrs(4)/2) dmask=1 ! if ipart_age is assigned to age species 
+			  !      ex 2 age species: j-itmp1+1-ntrs(4)/2 -> 5-3+1-4/2=1 or 6-3+1-4/2=2, where 1 & 2 are age species assigned in ipart_age
+			  !      ex 3 age species: j-itmp1+1-ntrs(4)/2 -> 6-3+1-6/2=1 or 7-3+1-6/2=2, where 1 & 2 are age species assigned in ipart_age
             do k=kbe(i)+1,nvrt !all prisms along vertical
-              if(j-itmp1+1<=ntrs(4)/2) then
-                bdy_frc(j,k,i)=0.d0
-              else
-                bdy_frc(j,k,i)=tr_el(j-ntrs(4)/2,k,i)
+              if(j-itmp1+1<=ntrs(4)/2) then ! j=itmp1+1 -> if 2 species then: 3-3+1=1 or 4-3+1=2 or 5-3+1=3 or 6-3+1=4 :: ntrs(4)/2 -> 4/2=2 for 2 species
+				! This is the concentration tracer
+                bdy_frc(j,k,i)=0.d0 ! sets bdy_frc of jth tracer. for concentration this never grows, it is just advected and initialized at the boundaries
+              else ! This is the age-concentration tracer						
+                bdy_frc(j,k,i)=dmask*tr_el(j-ntrs(4)/2,k,i) ! set to rate of growth or C value for age-concentration alpha Wouldn't this be based off tr_el initialized from the .ic file?
               endif
             enddo !k
           enddo !j
@@ -7637,25 +7644,25 @@
 !Debug
 !        write(12,*)'stage 1'
 
-!       Deal with AGE: clamp source elem @ i.c.
+!       Deal with AGE: clamp source elem @ i.c. Only relevant for cells with _hvar_1.nc set to 1.0
 #ifdef USE_AGE
 !$OMP single
-        do m=1,ntrs(4)/2 !first half
-          indx=irange_tr(1,4)+m-1 !into global tracer array
-          do i=1,nelem_age(m)
-            ie=ielem_age(i,m) 
+        do m=1,ntrs(4)/2 !first half of number of tracers
+          indx=irange_tr(1,4)+m-1 !into global tracer array of concentration
+          do i=1,nelem_age(m) 
+            ie=ielem_age(i,m) ! partial domain - redefining "age since when" spaces
 
-            if(level_age(m)/=-999) then
+            if(level_age(m)/=-999) then ! level age specifies if you're tracking age at a vertical level (for example: surface water)
               if(idry_e(ie)==1) then
                 klev=nvrt !arbitrary
               else
                 klev=max(kbe(ie)+1,min(nvrt,level_age(m)))
               endif
-              tr_el(indx,klev,ie)=1.d0
-              tr_el(indx+ntrs(4)/2,klev,ie)=0.d0
+              tr_el(indx,klev,ie)=1.d0 ! Concentration
+              tr_el(indx+ntrs(4)/2,klev,ie)=0.d0 ! Age-concentration (works for boundaries/domain, but not partial age)
             else !whole column
-              tr_el(indx,:,ie)=1.d0
-              tr_el(indx+ntrs(4)/2,:,ie)=0.d0
+              tr_el(indx,:,ie)=1.d0 ! Concentration
+              tr_el(indx+ntrs(4)/2,:,ie)=0.d0 ! Age-concentration set to zero (works for boundaries/domain, but not partial age)
             endif !level_age(m)
           enddo !i
         enddo !m

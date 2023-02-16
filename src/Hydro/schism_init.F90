@@ -209,7 +209,7 @@
      &level_age,vclose_surf_frac,iadjust_mass_consv0,ipre2, &
      &ielm_transport,max_subcyc,i_hmin_airsea_ex,hmin_airsea_ex,itransport_only,meth_sink, &
      &iloadtide,loadtide_coef,nu_sum_mult,i_hmin_salt_ex,hmin_salt_ex,h_massconsv,lev_tr_source, &
-     &rinflation_icm,iprecip_off_bnd
+     &rinflation_icm,iprecip_off_bnd,p_age
 
      namelist /SCHOUT/nc_out,iof_hydro,iof_wwm,iof_gen,iof_age,iof_sed,iof_eco,iof_icm_core, &
      &iof_icm_silica,iof_icm_zb,iof_icm_ph,iof_icm_cbp,iof_icm_sav,iof_icm_veg,iof_icm_sed, &
@@ -482,7 +482,7 @@
       fwvor_advxy_stokes=1; fwvor_advz_stokes=1; fwvor_gradpress=1; fwvor_breaking=1; wafo_obcramp=0;
       iwbl=0; cur_wwm=0; if_source=0; dramp_ss=2._rkind; ieos_type=0; ieos_pres=0; eos_a=-0.1_rkind; eos_b=1001._rkind;
       slr_rate=120._rkind; rho0=1000._rkind; shw=4184._rkind; isav=0; nstep_ice=1; h1_bcc=50._rkind; h2_bcc=100._rkind
-      hw_depth=1.d6; hw_ratio=0.5d0; iunder_deep=0; level_age=-999;
+      hw_depth=1.d6; hw_ratio=0.5d0; iunder_deep=0; level_age=-999; p_age=0;
       !vclose_surf_frac \in [0,1]: correction factor for vertical vel & flux. 1: no correction
       vclose_surf_frac=1.0
       iadjust_mass_consv0=0 !Enforce mass conservation for a tracer 
@@ -1469,8 +1469,31 @@
 #endif
 
 #ifdef USE_AGE
-      allocate(nelem_age(ntrs(4)/2),ielem_age(nea,ntrs(4)/2),stat=istat)
+      allocate(nelem_age(ntrs(4)/2),ielem_age(nea,ntrs(4)/2),ipart_age(nea),stat=istat)
       if(istat/=0) call parallel_abort('INIT: AGE allocation failure')
+#endif
+
+! Read in partial age property file
+#ifdef USE_AGE 
+	if(ip_age==1) then   ! ip_age flag set in param.nml which indicates a run with partial age tracer. On if set to 1
+      if(myrank==0) then ! only proc0 is going to do this (you can't have all the processors open the same file)
+        open(32,file=in_dir(1:len_in_dir)//'p_age.prop',status='old')  ! read in partial age prop file
+        ! TODO: check for number of variables in p_age.prop to see if appropriate number of tracers set
+        do i=1,ne_global
+          read(32,*)j,tmp
+          itmp=nint(tmp)
+          buf4(i)=tmp   ! fills temporary array with data from .prop file
+          if(iegl(i)%rank==myrank) itvd_e(iegl(i)%id)=itmp  ! fill ipart_age(i) not, % akin to python "." member variable of structure
+        enddo !i
+        close(32)
+      endif !myrank==0
+		
+      call mpi_bcast(buf4,ns_global,rtype,0,comm,istat) ! buf4 is temporary global variable to other processors with indicator of where their data starts
+ 
+      do i=1,ne_global ! looping over elements checking if assigned to current processor
+        if(iegl(i)%rank==myrank) ipart_age(iegl(i)%id)=nint(buf4(i)) ! if we're in this element is assigned to my processor/partition, then assign ipart_age the buf4
+      enddo !i
+	endif !p_age==1
 #endif
 !===========================================================================
       endif !iorder=0
@@ -5095,21 +5118,22 @@
         do m=irange_tr(1,mm),irange_tr(2,mm) 
           do i=1,nea
             do k=2,nvrt
-              tr_el(m,k,i)=sum(tr_nd(m,k,elnode(1:i34(i),i))+tr_nd(m,k-1,elnode(1:i34(i),i)))/2.d0/real(i34(i),rkind)
+              tr_el(m,k,i)=sum(tr_nd(m,k,elnode(1:i34(i),i))+tr_nd(m,k-1,elnode(1:i34(i),i)))/2.d0/real(i34(i),rkind) ! converts from node definitions to elements
             enddo !k
             tr_el(m,1,i)=tr_el(m,2,i) !mainly for hotstart format
           enddo !i=1,nea
 
 #ifdef USE_AGE
           !AGE: deal with first half of tracers only (2nd half=0). Mark non-0 elem
+		  ! for age (mm=4) with 2 species (4 tracers, ntrs(4)=4) the m loop will go from 3:6
           indx2=m-irange_tr(1,mm)+1 !local tracer index
           !If level_age=-999, the init from .ic is good (1 for all levels)
           if(mm==4.and.indx2<=ntrs(4)/2) then !.and.level_age(indx2)/=-999) then
             do i=1,nea
-              if(abs(tr_el(m,nvrt,i)-1)<1.d-4) then
+              if(abs(tr_el(m,nvrt,i)-1)<1.d0-4) then ! if tr_el is about = 1.0 (has all corners of prism) then put a mask on it otherwise we'll reset you.
                 nelem_age(indx2)=nelem_age(indx2)+1
                 if(nelem_age(indx2)>nea) call parallel_abort('INIT: increase dim of ielem_age')
-                ielem_age(nelem_age(indx2),indx2)=i
+                ielem_age(nelem_age(indx2),indx2)=i ! specifies which cells are going to reset age values
 
                 if(level_age(indx2)/=-999) then
                   if(idry_e(i)==1) then
