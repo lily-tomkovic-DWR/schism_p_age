@@ -118,7 +118,7 @@ module schism_glbl
                   &ntetype2,nsatype2,nnode_tr2(natrm),inu_tr(natrm), &
                   &nvar_sta,nout_sta,ntip,nbfr,itr_met,if_source,mass_source,nsources,nsinks, &
                   &max_flreg,irange_tr(2,natrm),nea_wwm,mnei_wwm,ne_wwm,neg_wwm, &
-                  &max_iadjust_mass_consv,nsteps_from_cold
+                  &max_iadjust_mass_consv,nsteps_from_cold,ip_age
 
   real(rkind),save :: q2min,tempmin,tempmax,saltmin,saltmax, &
                       &vis_coe1,vis_coe2,h_bcc1,velmin_btrack,h_tvd,rmaxvel1,rmaxvel2, &
@@ -622,7 +622,7 @@ module schism_glbl
 !#endif
 
 !USE_AGE
-  integer,save,allocatable :: nelem_age(:),ielem_age(:,:),level_age(:)
+  integer,save,allocatable :: nelem_age(:),ielem_age(:,:),level_age(:),ipart_age(:)
   
 !NAPZD
 !#ifdef USE_NAPZD
