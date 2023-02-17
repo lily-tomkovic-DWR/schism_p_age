@@ -128,7 +128,7 @@
                  &four_dim,five_dim,six_dim,seven_dim,eight_dim,nine_dim,nvars_hot, &
                  &MBEDP_dim,Nbed_dim,SED_ntr_dim,ice_ntr_dim,ICM_ntr_dim,ndelay_dim, &
                  &irec2,istack,var1d_dim(1),var2d_dim(2),var3d_dim(3),iscribe_2d, &
-                 &ised_out_sofar,irec4,istack4,nvars_hot_icm
+                 &ised_out_sofar,irec4,istack4,nvars_hot_icm,dmask
                  !ncid_schout,ncid_schout2,ncid_schout3,ncid_schout4,ncid_schout5, &
                  !&ncid_schout6,ncid_schout7,ncid_schout_2,ncid_schout2_2,ncid_schout3_2,ncid_schout4_2,ncid_schout5_2, &
                  !&ncid_schout6_2,ncid_schout7_2,
@@ -7306,24 +7306,19 @@
 !$OMP   end workshare
 
 !$OMP   do
-        do i=1,nea ! cycle through all elements
+        do i=1,nea
           if(idry_e(i)==1) cycle
 			
           !Element wet
           do j=itmp1,itmp2 !1,ntracers (ex 3:6 for 2 age species, 4 age tracers)
-			dmask=1 ! default: allow concentration to multiply
-			if (ip_age) then
-			  dmask=0 ! set to zero so only turned on when in partial age domain
-			  if(ipart_age(i)==j-itmp1+1-ntrs(4)/2) dmask=1 ! if ipart_age is assigned to age species 
-			  !      ex 2 age species: j-itmp1+1-ntrs(4)/2 -> 5-3+1-4/2=1 or 6-3+1-4/2=2, where 1 & 2 are age species assigned in ipart_age
-			  !      ex 3 age species: j-itmp1+1-ntrs(4)/2 -> 6-3+1-6/2=1 or 7-3+1-6/2=2, where 1 & 2 are age species assigned in ipart_age
+			dmask=1.d0 ! default: allow concentration to multiply
+			if (ip_age .and. ipart_age(i)/=j) dmask=0.d0 ! set to zero so only turned on when in partial age domain
             do k=kbe(i)+1,nvrt !all prisms along vertical
-              if(j-itmp1+1<=ntrs(4)/2) then ! j=itmp1+1 -> if 2 species then: 3-3+1=1 or 4-3+1=2 or 5-3+1=3 or 6-3+1=4 :: ntrs(4)/2 -> 4/2=2 for 2 species
-				! This is the concentration tracer
+              if(j-itmp1+1<=ntrs(4)/2) then ! j=itmp1+1 -> This is the concentration tracer
                 bdy_frc(j,k,i)=0.d0 ! sets bdy_frc of jth tracer. for concentration this never grows, it is just advected and initialized at the boundaries
               else ! This is the age-concentration tracer						
-                bdy_frc(j,k,i)=dmask*tr_el(j-ntrs(4)/2,k,i) ! set to rate of growth or C value for age-concentration alpha Wouldn't this be based off tr_el initialized from the .ic file?
-              endif
+                bdy_frc(j,k,i)=dmask*tr_el(j-ntrs(4)/2,k,i) ! set to rate of growth or C value for age-concentration alpha 
+              endif ! j-itmp1+1
             enddo !k
           enddo !j
         enddo !i
