@@ -7295,6 +7295,10 @@
 #endif /*USE_GEN*/
 
 #ifdef USE_AGE
+        if(myrank==0) write(16,*) 'Entering age module...'
+        if(ip_age) then
+          if(myrank==0) write(16,*) 'Evoking partial age...'
+		end if
 !$OMP   single
         itmp1=irange_tr(1,4)
         itmp2=irange_tr(2,4)
@@ -7312,9 +7316,9 @@
           !Element wet
           do j=itmp1,itmp2 !1,ntracers (ex 3:6 for 2 age species, 4 age tracers)
 			dmask=1.d0 ! default: allow concentration to multiply
-			if (ip_age .and. ipart_age(i)/=j) dmask=0.d0 ! set to zero so only turned on when in partial age domain
+			if (ip_age .and. (ipart_age(i)/=j)) dmask=0.d0 ! set to zero so only turned on when in partial age domain
             do k=kbe(i)+1,nvrt !all prisms along vertical
-              if(j-itmp1+1<=ntrs(4)/2) then ! j=itmp1+1 -> This is the concentration tracer
+              if((j-itmp1+1)<=(ntrs(4)/2)) then ! j=itmp1+1 -> This is the concentration tracer
                 bdy_frc(j,k,i)=0.d0 ! sets bdy_frc of jth tracer. for concentration this never grows, it is just advected and initialized at the boundaries
               else ! This is the age-concentration tracer						
                 bdy_frc(j,k,i)=dmask*tr_el(j-ntrs(4)/2,k,i) ! set to rate of growth or C value for age-concentration alpha 
@@ -9735,8 +9739,9 @@
 !            nsend_varout=nsend_varout+1
 !            if(nsend_varout>nscribes.or.icount>ncount_3dnode) call parallel_abort('STEP: icount>nscribes(1.8)')
             itmp=irange_tr(1,4)+i-1 !tracer #
-            bcc(1,1:nvrt,1:npa)=max(1.d-5,tr_nd(itmp,:,:))
-            bcc(1,1:nvrt,1:np)=tr_nd(itmp+ntrs(4)/2,:,1:np)/bcc(1,1:nvrt,1:np)/86400.d0
+            bcc(1,1:nvrt,1:npa)=max(1.d-5,tr_nd(itmp,:,:)) ! comment this out for concentration output
+            !bcc(1,1:nvrt,1:npa)=tr_nd(itmp,:,:) ! temporary concentration write-out use just this line
+            bcc(1,1:nvrt,1:np)=tr_nd(itmp+ntrs(4)/2,:,1:np)/bcc(1,1:nvrt,1:np)/86400.d0 ! comment this out for concentration output
 
             call savensend3D_scribe(icount,1,1,nvrt,np,bcc(1,1:nvrt,1:np))
 !            varout_3dnode(:,:,icount)=tr_nd(itmp+ntrs(4)/2,:,1:np)/bcc(1,1:nvrt,1:np)/86400.d0

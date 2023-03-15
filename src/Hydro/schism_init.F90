@@ -482,7 +482,7 @@
       fwvor_advxy_stokes=1; fwvor_advz_stokes=1; fwvor_gradpress=1; fwvor_breaking=1; wafo_obcramp=0;
       iwbl=0; cur_wwm=0; if_source=0; dramp_ss=2._rkind; ieos_type=0; ieos_pres=0; eos_a=-0.1_rkind; eos_b=1001._rkind;
       slr_rate=120._rkind; rho0=1000._rkind; shw=4184._rkind; isav=0; nstep_ice=1; h1_bcc=50._rkind; h2_bcc=100._rkind
-      hw_depth=1.d6; hw_ratio=0.5d0; iunder_deep=0; level_age=-999; ip_age=0.d0;
+      hw_depth=1.d6; hw_ratio=0.5d0; iunder_deep=0; level_age=-999;
       !vclose_surf_frac \in [0,1]: correction factor for vertical vel & flux. 1: no correction
       vclose_surf_frac=1.0
       iadjust_mass_consv0=0 !Enforce mass conservation for a tracer 
@@ -1473,28 +1473,6 @@
       if(istat/=0) call parallel_abort('INIT: AGE allocation failure')
 #endif
 
-! Read in partial age property file
-#ifdef USE_AGE 
-      if(ip_age==1) then   ! ip_age flag set in param.nml which indicates a run with partial age tracer. On if set to 1
-        if(myrank==0) then ! only proc0 is going to do this (you can't have all the processors open the same file)
-          open(32,file=in_dir(1:len_in_dir)//'p_age.prop',status='old')  ! read in partial age prop file
-          ! TODO: check for number of variables in p_age.prop to see if appropriate number of tracers set
-          do i=1,ne_global
-            read(32,*)j,tmp
-            itmp=nint(tmp)
-            buf4(i)=tmp   ! fills temporary array with data from .prop file
-            if(iegl(i)%rank==myrank) ipart_age(iegl(i)%id)=itmp+irange_tr(4,1)+ntrs(4)/2-1  ! fill ipart_age(i) re-indexed to correspond to age-concentration per species
-          enddo !i
-          close(32)
-        endif !myrank==0
-		
-        call mpi_bcast(buf4,ns_global,rtype,0,comm,istat) ! buf4 is temporary global variable to other processors with indicator of where their data starts
- 
-        do i=1,ne_global ! looping over elements checking if assigned to current processor
-          if(iegl(i)%rank==myrank) ipart_age(iegl(i)%id)=nint(buf4(i)) ! if we're in this element is assigned to my processor/partition, then assign ipart_age the buf4
-        enddo !i
-      endif !ip_age==1
-#endif
 !===========================================================================
       endif !iorder=0
 
@@ -4757,6 +4735,37 @@
       if(myrank==0) write(16,*)'tracer age calculation evoked'
       nelem_age(:)=0 !init count for # of non-0 age tracers
       flag_ic(4)=1 !AGE must have type 1 i.c.
+	  
+	  ! Read in partial age property file
+      if(ip_age==1) then   ! ip_age flag set in param.nml which indicates a run with partial age tracer. On if set to 1
+        if(myrank==0) write(16,*)'irange_tr(1,4), irange_tr(2,4), and ntrs(4)/2',irange_tr(1,4),irange_tr(2,4),ntrs(4)/2
+        if(myrank==0) then ! only proc0 is going to do this (you can't have all the processors open the same file)
+          open(32,file=in_dir(1:len_in_dir)//'p_age.prop',status='old')  ! read in partial age prop file
+          ! TODO: check for number of variables in p_age.prop to see if appropriate number of tracers set
+          do i=1,ne_global
+            read(32,*)j,tmp
+            !itmp=nint(tmp)
+			if(j==0) call parallel_abort('INIT: p_age.prop needs to be values of 1:n, where n = (number of age species) = (number of age tracers)/2')
+            buf4(i)=tmp+irange_tr(1,4)+ntrs(4)/2-1   ! fills temporary array with data from .prop file
+            !if(iegl(i)%rank==myrank) ipart_age(iegl(i)%id)=itmp+irange_tr(4,1)+ntrs(4)/2-1  ! fill ipart_age(i) re-indexed to correspond to age-concentration per species
+          enddo !i
+          close(32)
+		  
+		  ! write buf4 to prop file
+		  open(32,file=out_dir(1:len_out_dir)//'ipart_age_buf.prop',status='unknown')
+            do i=1,ne_global
+			  write(32,*) i,buf4(i)
+            enddo
+		  close(32)
+        endif !myrank==0
+		
+        call mpi_bcast(buf4,ns_global,rtype,0,comm,istat) ! buf4 is temporary global variable to other processors with indicator of where their data starts
+		
+        do i=1,ne_global ! looping over elements checking if assigned to current processor
+          if(iegl(i)%rank==myrank) ipart_age(iegl(i)%id)=nint(buf4(i)) ! if we're in this element is assigned to my processor/partition, then assign ipart_age the buf4
+        enddo !i
+		
+      endif !ip_age==1
 #endif
 
 #ifdef USE_SED
